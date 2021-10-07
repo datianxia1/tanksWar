@@ -6,17 +6,28 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.Vector;
 
-public class MyPanel extends JPanel implements KeyListener {
+//将MyPanel继承Runnable实现线程化,可以绘制子弹路径(通过run方法)
+public class MyPanel extends JPanel implements KeyListener, Runnable {
     private Hero hero = null;
-    //定义敌人tank
+    //定义敌人tank多个 采用Vector线程安全
     Vector<EnemyTank> enemyTanks = new Vector<>();
     int enemyTankSize = 3;
+
     public MyPanel() {
         hero = new Hero(100, 100);
         //hero.setSpeed(5);
         for (int i = 0; i < enemyTankSize; i++) {
+            //创建一个敌方Tank
             EnemyTank enemyTank = new EnemyTank(100 * (i + 1), 0);
+            //敌方Tank方向
             enemyTank.setDirect(2);
+            //创建炮弹
+            Shot shot = new Shot(enemyTank.getX() + 20, enemyTank.getY() + 60, enemyTank.getDirect());
+            //加入到shot集合
+            enemyTank.shots.add(shot);
+            //启动shot对象
+            new Thread(shot).start();
+            //加入敌方Tank集合
             enemyTanks.add(enemyTank);
         }
     }
@@ -24,11 +35,27 @@ public class MyPanel extends JPanel implements KeyListener {
     @Override
     public void paint(Graphics g) {
         super.paint(g);
-        System.out.println("11111");
         g.fillRect(0, 0, 1000, 800);
+        //画出hero
         drawTank(hero.getX(), hero.getY(), g, hero.getDirect(), 0);
+
         for (EnemyTank enemyTank : enemyTanks) {
-            drawTank(enemyTank.getX(),enemyTank.getY(),g,enemyTank.getDirect(),1);
+            //if (enemyTank.isAlive) {//存活的敌方Tank才被绘制
+
+                drawTank(enemyTank.getX(), enemyTank.getY(), g, enemyTank.getDirect(), 1);
+                for (Shot shot : enemyTank.shots) {
+                    if (shot.isAlive) {//活
+                        g.draw3DRect(shot.x, shot.y, 1, 1, false);
+                    } else {
+                        enemyTank.shots.remove(shot);
+                    }
+                }
+            //}
+        }
+        //绘制子弹
+        if (hero.shot != null && hero.shot.isAlive == true) {
+            //System.out.println("调用了画子弹");
+            g.draw3DRect(hero.shot.x, hero.shot.y, 1, 1, false);
         }
 
     }
@@ -87,6 +114,29 @@ public class MyPanel extends JPanel implements KeyListener {
 
     }
 
+    //编写方法判断我方炮弹是否击中敌方Tank
+    public static void hitTank(Shot s, EnemyTank enemyTank) {
+        switch (enemyTank.getDirect()) {
+            case 0:
+            case 1:
+                if (s.x <enemyTank.getX() + 40 && s.x > enemyTank.getX() &&
+                    s.y <enemyTank.getY() +60 && s.y < enemyTank.getY()) {
+                    s.isAlive = false;
+                    enemyTank.isAlive = false;
+                }
+                break;
+            case 2:
+            case 3:
+                if (s.x < enemyTank.getX() + 60 && s.x > enemyTank.getX() &&
+                        s.y <enemyTank.getY() +40 && s.y < enemyTank.getY()){
+                    s.isAlive = false;
+                    enemyTank.isAlive = false;
+                }
+                break;
+        }
+    }
+
+
     @Override
     public void keyTyped(KeyEvent e) {
 
@@ -111,6 +161,12 @@ public class MyPanel extends JPanel implements KeyListener {
             hero.moveLeft();
             hero.setDirect(3);
         }
+        //如果按下J会发射
+        if (e.getKeyCode() == KeyEvent.VK_J) {
+            System.out.println("射击");
+            hero.shotEnemyTank();
+
+        }
         //让面板重绘
         this.repaint();
     }
@@ -118,5 +174,24 @@ public class MyPanel extends JPanel implements KeyListener {
     @Override
     public void keyReleased(KeyEvent e) {
 
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            if (hero.shot != null && hero.shot.isAlive) {
+                for (EnemyTank enemyTank : enemyTanks) {
+                    hitTank(hero.shot, enemyTank);
+                }
+
+            }
+
+            this.repaint();
+        }
     }
 }
